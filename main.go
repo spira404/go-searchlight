@@ -13,6 +13,7 @@ type info struct {
 	size int64
 	path string
 	name string
+	hash string
 }
 
 var files = []info{}
@@ -20,11 +21,11 @@ var files = []info{}
 func main() {
 
 	path, _ := os.UserHomeDir()
-	size := 0.5
+	size := 0.0
 
 	fmt.Print("Enter the path (default: ~/): ")
 	fmt.Scanln(&path)
-	fmt.Print("Enter the minimal size in MB (default: 0.5): ")
+	fmt.Print("Enter the minimal size in MB (default: 0.0): ")
 	fmt.Scanln(&size)
 
 	gather_files(path)
@@ -45,7 +46,7 @@ func main() {
 	}
 
 	// print out equal files
-	iterate_same(files)
+	process_same(files)
 }
 
 // recursively go through every folder and collect info about every file to slice
@@ -58,7 +59,7 @@ func gather_files(directory string) {
 
 		if !element.IsDir() {
 			// add file info to the files slice
-			files = append(files, info{element.Size(), directory, element.Name()})
+			files = append(files, info{element.Size(), directory, element.Name(), ""})
 		} else {
 			// add folder into folders slice
 			folders = append(folders, mkpath(directory, element.Name()))
@@ -72,87 +73,92 @@ func gather_files(directory string) {
 }
 
 // process files with same size
-func iterate_same(slice []info) {
+func process_same(slice []info) {
 	// for the item
 	for i := 0; i < len(slice); i++ {
 		// for the item next to item above
 		for j := i + 1; j < len(slice); j++ {
-			if slice[i].size == slice[j].size {
-				continue
+			if slice[i].size != slice[j].size {
+				// now from i to j-1 there are same-size items
+				start := i
+				end := j
+				// the last not same item index becomes start
+				i = j
+				// should be at least two items to be possible to be the equal
+				if len(slice[start:end]) > 1 {
+					process_equal(slice[start:end])
+				}
+				// in case of the last items in slice are same, this used, otherwise they're skipping
+			} else if j == len(slice)-1 {
+				start := i
+				end := j
+				i = j
+				if len(slice[start:end+1]) > 1 {
+					process_equal(slice[start : end+1])
+				}
 			}
-			// now from i to j-1 there are same-size items
-			start := i
-			end := j
-			// the last not same item index becomes start
-			i = j
-			// should be at least two items to be possible to be the equal
-			if len(slice[start:end]) > 1 {
-				iterate_equal(slice[start:end])
-			}
+
 		}
 	}
 }
 
-func iterate_equal(same []info) {
+func process_equal(same []info) {
 
-	equal := []info{}
-
-	// another "at least 2" check because of recursion
-	if len(same) < 2 {
-		return
+	for index, _ := range same {
+		same[index].hash = mkhash(mkpath(same[index].path, same[index].name))
 	}
 
-	// for cycle process only first item
-	for num, val := range same {
+	sort.SliceStable(same, func(i, j int) bool {
+		size1 := same[i].hash
+		size2 := same[j].hash
+		return size1 < size2
+	})
 
-		// adding first item to find it's clone
-		equal = append(equal, val)
+	for i := 0; i < len(same); i++ {
+		for j := i + 1; j < len(same); j++ {
 
-		for index := num + 1; index < len(same); index++ {
+			if same[i].hash != same[j].hash {
 
-			if check_hash(mkpath(val.path, val.name), mkpath(same[index].path, same[index].name)) {
-				equal = append(equal, same[index])
-				// remove equal items to process other possible bunch of equal
-				same = remove(same, index)
-				// go to same index bc of removing above
-				index -= 1
+				start := i
+				end := j
+				i = j
+
+				if len(same[start:end]) > 1 {
+					equal := same[start:end]
+					size := float64(equal[0].size) / 1024.0 / 1024.0
+					fmt.Printf("%.2f MB\n", size)
+					fmt.Println(same[0].hash)
+					for _, file := range equal {
+						fmt.Println(mkpath(file.path, file.name))
+					}
+					fmt.Printf("\n")
+				}
+				// in case of the last items in slice are same, this used, otherwise they're skipping
+			} else if j == len(same)-1 {
+				start := i
+				end := j
+				i = j
+				if len(same[start:end+1]) > 1 {
+					equal := same[start : end+1]
+					size := float64(equal[0].size) / 1024.0 / 1024.0
+					fmt.Printf("%.2f MB\n", size)
+					fmt.Println(same[0].hash)
+					for _, file := range equal {
+						fmt.Println(mkpath(file.path, file.name))
+					}
+					fmt.Printf("\n")
+				}
 			}
 		}
-
-		// remove the first item, whether we found it's clone or not
-		same = remove(same, 0)
-
-		// if not, leave the cycle
-		if len(equal) < 2 {
-			break
-		}
-
-		// get size in MB
-		size := float64(equal[0].size) / 1024.0 / 1024.0
-		fmt.Printf("%.2f MB\n", size)
-
-		plaintext, _ := ioutil.ReadFile(mkpath(equal[0].path, equal[0].name))
-		hash := md5.Sum([]byte(plaintext))
-
-		fmt.Printf("%x\n", hash)
-		for _, file := range equal {
-			fmt.Println(mkpath(file.path, file.name))
-		}
-		fmt.Printf("\n")
-
-		break
 	}
-	iterate_equal(same)
-
 }
 
 // take md5 hash of two files from input paths and compare them
-func check_hash(path1, path2 string) bool {
-	plaintext1, _ := ioutil.ReadFile(path1)
-	plaintext2, _ := ioutil.ReadFile(path2)
-	hash1 := md5.Sum([]byte(plaintext1))
-	hash2 := md5.Sum([]byte(plaintext2))
-	return hash1 == hash2
+func mkhash(path string) string {
+	plaintext, _ := ioutil.ReadFile(path)
+	hexhash := md5.Sum([]byte(plaintext))
+	hash := fmt.Sprintf("%x", hexhash)
+	return hash
 }
 
 // make path string from two parts of it
