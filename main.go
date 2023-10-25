@@ -1,11 +1,11 @@
 package main
 
 import (
-	"crypto/md5"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"sort"
+	"github.com/zeebo/xxh3"
 )
 
 // information about each file
@@ -156,7 +156,7 @@ func process_equal(same []info) {
 // take md5 hash of two files from input paths and compare them
 func mkhash(path string) string {
 	plaintext, _ := ioutil.ReadFile(path)
-	hexhash := md5.Sum([]byte(plaintext))
+	hexhash := xxh3.Hash([]byte(plaintext))
 	hash := fmt.Sprintf("%x", hexhash)
 	return hash
 }
