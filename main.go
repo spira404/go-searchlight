@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"sort"
+	"strings"
+	"io/ioutil"
+	"path/filepath"
 	"github.com/zeebo/xxh3"
 )
 
@@ -20,11 +22,16 @@ var files = []info{}
 
 func main() {
 
-	path, _ := os.UserHomeDir()
-	size := 0.0
-
+	home, _ := os.UserHomeDir()
+	path := home
 	fmt.Print("Enter the path (default: ~/): ")
 	fmt.Scanln(&path)
+
+	if strings.Contains(path, "~"){
+		path = strings.Replace(path, "~", home, -1)
+	}
+
+	size := 0.0
 	fmt.Print("Enter the minimal size in MB (default: 0.0): ")
 	fmt.Scanln(&size)
 
@@ -62,7 +69,7 @@ func gather_files(directory string) {
 			files = append(files, info{element.Size(), directory, element.Name(), ""})
 		} else {
 			// add folder into folders slice
-			folders = append(folders, mkpath(directory, element.Name()))
+			folders = append(folders, filepath.Join(directory, element.Name()))
 		}
 	}
 
@@ -82,7 +89,7 @@ func process_same(slice []info) {
 				// now from i to j-1 there are same-size items
 				start := i
 				end := j
-				// the last not same item index becomes start
+				// the last not same, item index becomes start
 				i = j
 				// should be at least two items to be possible to be the equal
 				if len(slice[start:end]) > 1 {
@@ -105,7 +112,7 @@ func process_same(slice []info) {
 func process_equal(same []info) {
 
 	for index, _ := range same {
-		same[index].hash = mkhash(mkpath(same[index].path, same[index].name))
+		same[index].hash = mkhash(filepath.Join(same[index].path, same[index].name))
 	}
 
 	sort.SliceStable(same, func(i, j int) bool {
@@ -129,7 +136,7 @@ func process_equal(same []info) {
 					fmt.Printf("%.2f MB\n", size)
 					fmt.Println(same[0].hash)
 					for _, file := range equal {
-						fmt.Println(mkpath(file.path, file.name))
+						fmt.Println(filepath.Join(file.path, file.name))
 					}
 					fmt.Printf("\n")
 				}
@@ -144,7 +151,8 @@ func process_equal(same []info) {
 					fmt.Printf("%.2f MB\n", size)
 					fmt.Println(same[0].hash)
 					for _, file := range equal {
-						fmt.Println(mkpath(file.path, file.name))
+						fmt.Println(filepath.Join(file.path, file.name))
+						
 					}
 					fmt.Printf("\n")
 				}
@@ -159,12 +167,6 @@ func mkhash(path string) string {
 	hexhash := xxh3.Hash([]byte(plaintext))
 	hash := fmt.Sprintf("%x", hexhash)
 	return hash
-}
-
-// make path string from two parts of it
-func mkpath(path, name string) string {
-	fullpath := path + "/" + name
-	return fullpath
 }
 
 // remove element of an array by it's index
